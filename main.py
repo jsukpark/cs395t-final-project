@@ -4,7 +4,7 @@
 from typing import Tuple
 from functools import partial
 
-import jax.numpy as np
+import jax.numpy as jnp
 from trajax.optimizers import ilqr
 import matplotlib.pyplot as plt
 
@@ -28,12 +28,12 @@ def verify_ilqr():
     Then the next state is computed using velocity Verlet algorithm
     (https://en.wikipedia.org/wiki/Verlet_integration#Velocity_Verlet)
     """
-    def example_cost(x: np.ndarray, u: np.ndarray, t: float) -> float:
+    def example_cost(x: jnp.ndarray, u: jnp.ndarray, t: float) -> float:
         """Cost function to minimize
         for the 1D simple harmonic oscillator
         (must also minimize the amount of force applied)
         """
-        C = np.array([[1, 0, 0], [0, 0, 0], [0, 0, 0]]) * 0.5
+        C = jnp.array([[1, 0, 0], [0, 0, 0], [0, 0, 0]]) * 0.5
         return x @ C @ x + u @ u
 
     def _dyn(
@@ -60,7 +60,7 @@ def verify_ilqr():
             X.append(xt)
         observed, _, _ = zip(*X)
         expected = [cos(t) for t in tarray]
-        expected, observed = np.array(expected), np.array(observed)
+        expected, observed = jnp.array(expected), jnp.array(observed)
         plt.plot(tarray, expected, 'b-', label='expected')
         plt.plot(tarray, observed, 'r--', label='observed')
         plt.xlim(min(tarray), max(tarray))
@@ -75,31 +75,31 @@ def verify_ilqr():
     test_dyn()
 
     def example_dynamics(
-            x: np.ndarray,
-            u: np.ndarray,
+            x: jnp.ndarray,
+            u: jnp.ndarray,
             t: float,
             dt: float = 1e-2,
             mass: float = 1.0,
-            ) -> np.ndarray:
+            ) -> jnp.ndarray:
         """Dynamics function
         for the 1D simple harmonic oscillator
         """
-        A = np.array([
+        A = jnp.array([
             list(_dyn((1., 0., 0.), 0., dt=dt, mass=mass)),
             list(_dyn((0., 1., 0.), 0., dt=dt, mass=mass)),
             list(_dyn((0., 0., 1.), 0., dt=dt, mass=mass)),
         ]).T
-        B = np.array([
+        B = jnp.array([
             list(_dyn((0., 0., 0.), 1., dt=dt, mass=mass)),
         ]).T
         return A @ x + B @ u
 
     def trajectory_without_control(
             T: int,
-            x0: np.ndarray,
+            x0: jnp.ndarray,
             dt: float,
             mass: float,
-            ) -> np.ndarray:
+            ) -> jnp.ndarray:
         """Return the trajectory of system states
         as an array of shape (T+1, x0.size)
         """
@@ -107,19 +107,19 @@ def verify_ilqr():
         for t in range(T):
             X0.append(
                 example_dynamics(
-                    X0[-1], np.zeros(1), t*dt,
+                    X0[-1], jnp.zeros(1), t*dt,
                     dt=dt, mass=mass,
                 )
             )
-        X0 = np.array(X0)
+        X0 = jnp.array(X0)
         return X0
 
     # Verification code
     T = 1000
     DELTA_T = 1e-1
     MASS = 1.0
-    x0 = np.array([1.0, 0.0, -1.0])
-    U0 = np.zeros((T, 1))
+    x0 = jnp.array([1.0, 0.0, -1.0])
+    U0 = jnp.zeros((T, 1))
     X, U, obj, grad, adjoints, lqr, iteration = ilqr(
         example_cost,
         partial(example_dynamics, dt=DELTA_T, mass=MASS),
@@ -128,10 +128,10 @@ def verify_ilqr():
         grad_norm_threshold=1e-12,
         maxiter=1000,
     )
-    tarray = np.arange(T+1)*DELTA_T
+    tarray = jnp.arange(T+1)*DELTA_T
     X0 = trajectory_without_control(T, x0, dt=DELTA_T, mass=MASS)
     plt.figure(figsize=(14., 6.))
-    plt.plot(tarray, np.zeros_like(tarray), 'k-')
+    plt.plot(tarray, jnp.zeros_like(tarray), 'k-')
     plt.plot(tarray, X0[:, 0], 'r--',
              label='trajectory without control')
     plt.plot(tarray, X[:, 0], 'b-',
