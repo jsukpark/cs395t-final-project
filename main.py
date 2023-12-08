@@ -1,13 +1,23 @@
 """Main code
 """
 
-from typing import Tuple
+from typing import Any, Tuple, Callable
 from functools import partial
+from itertools import product
 
+import numpy as np
+import torch
+from torch.utils.data import DataLoader
+import torch.nn.functional as F
+import gymnasium as gym
+import jax
 import jax.numpy as jnp
 from trajax.optimizers import ilqr
 import matplotlib.pyplot as plt
 
+
+PRNG_SEED = 0
+KEY = jax.random.key(PRNG_SEED)
 
 def verify_ilqr():
     """
@@ -146,5 +156,99 @@ def verify_ilqr():
     plt.show()
 
 
+def to_onehot(a: jnp.ndarray):
+    """Given a 1D array `a`,
+    return array `anew` of the same shape where
+    ```
+    anew[i] == (1.0 if i == argmax(a) else 0.0)
+    ```
+    """
+    assert a.ndim == 1
+    anew = (jnp.arange(a.size) == a.argmax()).astype(float)
+    return anew
+
+
+def to_onehot_p(a: jnp.ndarray):
+    """Similar to `to_onehot()`,
+    but split evenly between any ties
+    (for example, if `a = [1, 2, 3, 3]`,
+    then `anew = [0.0, 0.0, 0.5, 0.5]`)
+    """
+    anew = (a == a.max()).astype(float)
+    anew /= anew.sum()
+    return anew
+
+
+def discretize_action(a: jnp.ndarray):
+    """Convert each value `a[i]` in range [-1, 1]
+    to index of nearest action (in {0, 1, 2}, where
+    action[i] = a[i].round() + 1)
+    """
+    return a.round() + 1
+
+
+def guided_policy_search(
+        policy: torch.nn.Module,
+        cost: Callable,
+        dynamics: Callable,
+        env: gym.Env,
+        num_steps_pred: int = 50,
+        num_epochs: int = 100,
+        convert_to_action: Callable = lambda x: x,
+        lagrange_multiplier_learning_rate: float = 1e-3,
+        ) -> None:
+    """Given an untrained parametrized policy function,
+    train the policy function parameters in-place
+    using guided policy search
+    """
+    out = env.reset(seed=PRNG_SEED)
+    if isinstance(out, Tuple) and len(out) == 2 and isinstance(out[1], dict):
+        out = out[0]
+    x0 = jnp.array(out)
+    action_dim = gym.spaces.utils.flatdim(env.action_space)
+    # TODO: Ensure this is vectorizable, esp. matmul in the second term
+    def lagrangian(x, u, tidx, lambda_t):
+        """Surrogate cost"""
+        return cost(x, u, tidx) + lambda_t @ (policy(x) - convert_to_action(u))
+
+    # Step 1 (minimizing over trajectory):
+    # Find traj that minimizes Lagrangian(traj, params, lambda_) using iLQR
+    lambda_ = jax.random.normal(KEY, (num_steps_pred, action_dim))
+    # surrogate cost
+    def s_cost(x, u, tidx):
+        return lagrangian(x, u, tidx, lambda_[tidx])
+
+    policy.eval()
+    X, U, _, _, _, _, _ = ilqr(
+        s_cost,
+        dynamics,
+        x0,
+        jnp.zeros((num_steps_pred, action_dim)),
+    )
+    # Step 2 (minimizing over parameters):
+    # Find params that minimizes Lagrangian(traj, params, lambda_) using SGD
+    U = jax.vmap(convert_to_action, 0)(U)
+    assert X.shape[0] == U.shape[0] + 1
+    # data = list(zip(np.array(X), np.array(U)))
+    # loader = DataLoader(data, batch_size=num_steps_pred)
+    loader = [(torch.tensor(np.array(X)), torch.tensor(np.array(U)))]
+    optimizer = torch.optim.Adam(policy.parameters(), lr=1e-3)
+    policy.train()
+    for epoch, batch in product(range(num_epochs), loader):
+        x, u = batch
+        uhat = policy(x)
+        loss = F.cross_entropy(uhat, u)
+        if loss < 1e-8:
+            break
+        loss.backward()
+        optimizer.step()
+        optimizer.zero_grad()
+    # Step 3 (maximizing over Lagrange multiplier):
+    # Find lambda_ that maximizes Lagrangian(traj, params, lambda_)
+    dlambda = jax.grad(
+        partial(lagrangian, X[:-1], U, jnp.arange(num_epochs)),
+    )
+    lambda_ = lambda_ + lagrange_multiplier_learning_rate * jax.grad(lambda_)
+
 if __name__ == '__main__':
-    verify_ilqr()
+    pass
