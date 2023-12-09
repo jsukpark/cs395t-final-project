@@ -18,5 +18,6 @@ source .env/bin/activate
 pip install --upgrade pip
 pip install gymnasium[classic-control] minari stable-baselines3[extra] torchrl
 pip install ipykernel
-pip install moviepy  # need this to render as video output
+pip install moviepy    # need this to render as video output
+pip install imitation  # need this for IRL
 ```
