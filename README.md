@@ -20,4 +20,5 @@ pip install gymnasium[classic-control] minari stable-baselines3[extra] torchrl
 pip install ipykernel
 pip install moviepy    # need this to render as video output
 pip install imitation  # need this for IRL
+pip install seals      # need this for wrapper implementing fixed horizon
 ```
