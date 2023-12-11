@@ -16,6 +16,8 @@ source .env/bin/activate
 2. **Install dependencies.** Run:
 ```
 pip install --upgrade pip
-pip install gymnasium minari stable-baselines3 torchrl
-pip install git+https://github.com/google/trajax
+pip install gymnasium[classic-control] minari stable-baselines3[extra] torchrl
+pip install ipykernel
+pip install moviepy    # need this to render as video output
+pip install imitation  # need this for IRL
 ```
