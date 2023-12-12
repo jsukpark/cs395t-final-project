@@ -1,6 +1,5 @@
 #repo specific ignores
 .DS_Store
-.gitattributes
 *.swp
 .vscode/
 final.ipynb
