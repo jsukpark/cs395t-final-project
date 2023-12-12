@@ -5,6 +5,7 @@
 final.ipynb
 hamiltonian-nn/
 *.zip
+*.pickle
 
 # Byte-compiled / optimized / DLL files
 __pycache__/
