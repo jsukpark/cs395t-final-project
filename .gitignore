@@ -171,3 +171,4 @@ cython_debug/
 # Video output files
 gym-results*/
 deprecated/
+Symplectic-ODENet/
